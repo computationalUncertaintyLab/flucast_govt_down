@@ -238,9 +238,16 @@ forecasts, target_admissions, ili_data, weather_data, hosp_reporting, available_
 app = st.columns(1)
 
 with app[0]:
-    st.title("Influenza Hospitalization Forecast")
-    st.write("This is a forecast of influenza hospitalizations for the current season.")
-    st.write("The forecast is based on the historical data and the current season data.")
+    st.title("Influenza Hospitalization Forecast: 2025/2026 Season")
+    st.markdown("""
+    **Forecast for the 2025/2026 influenza season** (starting epidemic week 40, 2025)
+    
+    The forecast shows:
+    - **Median prediction** (solid line)
+    - **50% prediction interval** (darker shaded area) - there is a 50% probability the true value falls within this range
+    - **80% prediction interval** (lighter shaded area, shown for 1-2 locations) - there is an 80% probability the true value falls within this range
+    - **Observed data** (black circles) - actual reported hospitalizations for the current season
+    """)
     
     # Location selector
     selected_locations = st.multiselect(
@@ -254,6 +261,12 @@ with app[0]:
     else:
         # Filter data for selected locations
         forecast_data = forecasts[forecasts['location_name'].isin(selected_locations)].copy()
+        
+        # Get observed data for 2025/2026 season
+        observed_2025 = target_admissions[
+            (target_admissions['location_name'].isin(selected_locations)) &
+            (target_admissions['season'] == '2025/2026')
+        ].copy()
         
         # Determine which quantiles to use based on number of locations
         show_80pi = len(selected_locations) < 3
@@ -283,51 +296,92 @@ with app[0]:
                 suffixes=('_lower', '_upper')
             )
         
+        # Prepare observed data with proper date column name
+        if not observed_2025.empty:
+            observed_2025_plot = observed_2025.copy()
+            observed_2025_plot['target_end_date'] = observed_2025_plot['date']
+        
         # Build Altair chart with layered components
         if show_80pi:
-            chart = (
-                alt.layer(
-                    alt.Chart(pi80_data).mark_area(opacity=0.2).encode(
-                        x=alt.X('target_end_date:T', title='Date'),
-                        y=alt.Y('value_lower:Q', title='Incident flu hospitalizations'),
-                        y2='value_upper:Q',
-                        color=alt.Color('location_name:N', title='Location')
-                    ),
-                    alt.Chart(pi50_data).mark_area(opacity=0.4).encode(
-                        x=alt.X('target_end_date:T', title='Date'),
-                        y=alt.Y('value_lower:Q', title='Incident flu hospitalizations'),
-                        y2='value_upper:Q',
-                        color=alt.Color('location_name:N', legend=None)
-                    ),
-                    alt.Chart(median_data).mark_line(size=2).encode(
+            layers = [
+                alt.Chart(pi80_data).mark_area(opacity=0.2).encode(
+                    x=alt.X('target_end_date:T', title='Date'),
+                    y=alt.Y('value_lower:Q', title='Incident flu hospitalizations'),
+                    y2='value_upper:Q',
+                    color=alt.Color('location_name:N', title='Location')
+                ),
+                alt.Chart(pi50_data).mark_area(opacity=0.4).encode(
+                    x=alt.X('target_end_date:T', title='Date'),
+                    y=alt.Y('value_lower:Q', title='Incident flu hospitalizations'),
+                    y2='value_upper:Q',
+                    color=alt.Color('location_name:N', legend=None)
+                ),
+                alt.Chart(median_data).mark_line(size=2).encode(
+                    x=alt.X('target_end_date:T', title='Date'),
+                    y=alt.Y('value:Q', title='Incident flu hospitalizations'),
+                    color=alt.Color('location_name:N', legend=None)
+                )
+            ]
+            
+            # Add observed data points if available
+            if not observed_2025.empty:
+                layers.append(
+                    alt.Chart(observed_2025_plot).mark_circle(size=60, color='black').encode(
                         x=alt.X('target_end_date:T', title='Date'),
                         y=alt.Y('value:Q', title='Incident flu hospitalizations'),
-                        color=alt.Color('location_name:N', legend=None)
+                        tooltip=['location_name:N', 'target_end_date:T', 'value:Q']
                     )
-                ).properties(
-                    width=800,
-                    height=400
-                ).interactive()
-            )
+                )
+            
+            chart = alt.layer(*layers).properties(
+                width=800,
+                height=400,
+                title={
+                    "text": "2025/2026 Season Forecast",
+                    "subtitle": ["Median forecast with 50% PI (darker) and 80% PI (lighter)", 
+                                 "Black circles show observed hospitalizations"],
+                    "fontSize": 16,
+                    "subtitleFontSize": 12,
+                    "anchor": "start"
+                }
+            ).interactive()
         else:
-            chart = (
-                alt.layer(
-                    alt.Chart(pi50_data).mark_area(opacity=0.4).encode(
-                        x=alt.X('target_end_date:T', title='Date'),
-                        y=alt.Y('value_lower:Q', title='Incident flu hospitalizations'),
-                        y2='value_upper:Q',
-                        color=alt.Color('location_name:N', title='Location')
-                    ),
-                    alt.Chart(median_data).mark_line(size=2).encode(
+            layers = [
+                alt.Chart(pi50_data).mark_area(opacity=0.4).encode(
+                    x=alt.X('target_end_date:T', title='Date'),
+                    y=alt.Y('value_lower:Q', title='Incident flu hospitalizations'),
+                    y2='value_upper:Q',
+                    color=alt.Color('location_name:N', title='Location')
+                ),
+                alt.Chart(median_data).mark_line(size=2).encode(
+                    x=alt.X('target_end_date:T', title='Date'),
+                    y=alt.Y('value:Q', title='Incident flu hospitalizations'),
+                    color=alt.Color('location_name:N', legend=None)
+                )
+            ]
+            
+            # Add observed data points if available
+            if not observed_2025.empty:
+                layers.append(
+                    alt.Chart(observed_2025_plot).mark_circle(size=60, color='black').encode(
                         x=alt.X('target_end_date:T', title='Date'),
                         y=alt.Y('value:Q', title='Incident flu hospitalizations'),
-                        color=alt.Color('location_name:N', legend=None)
+                        tooltip=['location_name:N', 'target_end_date:T', 'value:Q']
                     )
-                ).properties(
-                    width=800,
-                    height=400
-                ).interactive()
-            )
+                )
+            
+            chart = alt.layer(*layers).properties(
+                width=800,
+                height=400,
+                title={
+                    "text": "2025/2026 Season Forecast",
+                    "subtitle": ["Median forecast with 50% prediction interval (shaded area)", 
+                                 "Black circles show observed hospitalizations"],
+                    "fontSize": 16,
+                    "subtitleFontSize": 12,
+                    "anchor": "start"
+                }
+            ).interactive()
         
         st.altair_chart(chart, use_container_width=True)
         
