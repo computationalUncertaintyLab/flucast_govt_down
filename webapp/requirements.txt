@@ -3,4 +3,5 @@ pandas
 numpy
 altair
 boto3
+epiweeks
 
