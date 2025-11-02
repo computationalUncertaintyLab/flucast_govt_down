@@ -87,14 +87,23 @@ def add_epiweek_info(df, date_col):
     df['epiyear'] = epiweek_info['epiyear']
     
     # Filter to only include epi weeks 40-53 and 1-20 (the flu season)
-    df = df[(df['epiweek'] >= 40) | (df['epiweek'] <= 20)].copy()
+    # For 2025, also include weeks 35-39 to capture early 2025/2026 season data
+    df = df[
+        (df['epiweek'] >= 40) | 
+        (df['epiweek'] <= 20) |
+        ((df['epiyear'] == 2025) & (df['epiweek'] >= 35) & (df['epiweek'] <= 39))
+    ].copy()
     
     # Determine season (year season starts) and handle 52/53 week years
     def calculate_season_and_weeks(row):
         epiweek = row['epiweek']
         epiyear = row['epiyear']
         
-        if epiweek >= 40:
+        # Special handling for 2025 weeks 35-39 (early 2025/2026 season)
+        if epiyear == 2025 and 35 <= epiweek <= 39:
+            season = "2025/2026"
+            weeks_from_start = epiweek - 40  # Will be negative, but that's ok for display
+        elif epiweek >= 40:
             # This is the start of the season
             season_start_year = epiyear
             season = f"{epiyear}/{epiyear+1}"
@@ -262,10 +271,14 @@ with app[0]:
         # Filter data for selected locations
         forecast_data = forecasts[forecasts['location_name'].isin(selected_locations)].copy()
         
-        # Get observed data for 2025/2026 season
+        # Get observed data for 2025/2026 season (include epi weeks 35 onwards for this season)
+        # For 2025/2026, we want weeks 35-52 of 2025 and weeks 1-20 of 2026
         observed_2025 = target_admissions[
             (target_admissions['location_name'].isin(selected_locations)) &
-            (target_admissions['season'] == '2025/2026')
+            (
+                ((target_admissions['epiyear'] == 2025) & (target_admissions['epiweek'] >= 35)) |
+                ((target_admissions['epiyear'] == 2026) & (target_admissions['epiweek'] <= 20))
+            )
         ].copy()
         
         # Determine which quantiles to use based on number of locations
